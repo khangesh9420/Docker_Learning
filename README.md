@@ -92,6 +92,121 @@ Using **multi-stage builds** helps:
 It's the best practice for containerizing Python applications—especially when your build tools aren’t needed at runtime.
 
 ---
+Dockerizing Python with Distroless
 
-Feel free to copy this file into your GitHub repository as `README.md` or documentation!
+This guide shows how to build and run a secure, minimal Docker image for a Python app using Distroless containers.
+
+🧰 What is Distroless?
+
+Distroless images are Docker images that do not include a package manager, shell, or OS-level tools. They include only:
+
+Your application
+
+Its runtime (e.g., Python interpreter)
+
+This results in:
+
+✅ Smaller image sizes
+
+✅ Improved security
+
+✅ Faster deployments
+
+⚒️ Use Case: Python CLI App (calculator.py)
+
+This guide assumes you have a simple Python script like:
+
+# calculator.py
+A = float(input("Enter first number: "))
+B = float(input("Enter second number: "))
+operation = input("Choose operation (+, -, *, /): ")
+
+if operation == '+':
+    print("Result:", A + B)
+elif operation == '-':
+    print("Result:", A - B)
+elif operation == '*':
+    print("Result:", A * B)
+elif operation == '/':
+    print("Result:", A / B)
+else:
+    print("Invalid operation")
+
+✅ Final Dockerfile (Multistage with Distroless)
+
+# -------- Stage 1: Build --------
+FROM python:3.9-slim AS build
+
+WORKDIR /app
+COPY . .
+
+# Optional: Install dependencies
+# RUN pip install -r requirements.txt --target /app
+
+# -------- Stage 2: Runtime --------
+FROM gcr.io/distroless/python3
+
+WORKDIR /app
+COPY --from=build /app /app
+
+CMD ["calculator.py"]
+
+🚀 Build & Run
+
+# Build the image
+docker build -t calculator-distroless .
+
+# Run the container
+docker run -it calculator-distroless
+
+Use -it to keep the terminal interactive if using input() in your script.
+
+📈 Benefits of Distroless
+
+Feature
+
+Value
+
+Size
+
+✅ Much smaller than Ubuntu-based
+
+Security
+
+✅ No shell, no package manager
+
+Attack surface
+
+✅ Minimal
+
+Runtime only
+
+✅ Includes only Python
+
+Best practice
+
+✅ For production deployments
+
+🔎 Debugging Tips
+
+Distroless images have no shell, so you can't docker exec into them.
+
+To debug, add a temporary step to your Dockerfile using an image with bash:
+
+FROM python:3.9-slim  # for debugging
+CMD ["bash"]
+
+🧠 Summary
+
+Using Distroless + Multistage builds helps you:
+
+Create ultra-small, secure Python containers
+
+Avoid bloated images with unnecessary tools
+
+Align with Docker best practices for production
+
+📦 Want more?
+
+Check out the official Distroless project: https://github.com/GoogleContainerTools/distroless
 
