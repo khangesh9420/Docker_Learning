@@ -1,0 +1,178 @@
+
+# Data Vault Implementation Guide
+
+## 1. Data Vault Modeling Steps
+
+### A. Raw Vault Modeling
+
+#### **Hubs (Core Business Entities)**
+
+**Purpose:**  
+Hubs store unique business keys for key entities in the data model (e.g., Orders, Customers, Deliveries, Materials).
+
+**Steps:**
+- Create a table for each core entity (e.g., `Hub_Order`, `Hub_Customer`, `Hub_Delivery`, `Hub_Material`).
+- Each hub includes:
+  - Primary key (e.g., `Order_ID`)
+  - `LoadDate` to track data load time
+  - `RecordSource` to identify data origin
+
+**Example:**
+
+```sql
+CREATE TABLE Hub_Order (
+    Order_ID VARCHAR(10) PRIMARY KEY,
+    LoadDate TIMESTAMP,
+    RecordSource VARCHAR(50)
+);
+```
+
+#### **Links (Relationships between Business Entities)**
+
+**Purpose:**  
+Links define the relationships between the hubs (e.g., linking Orders to Customers or Orders to Materials).
+
+**Steps:**
+- Create link tables like `Link_Order_Customer`, `Link_Order_Material`, `Link_Delivery_Order`.
+- Use business keys from hubs to create composite primary keys.
+
+**Example:**
+
+```sql
+CREATE TABLE Link_Order_Customer (
+    Order_ID VARCHAR(10),
+    Customer_ID VARCHAR(10),
+    LoadDate TIMESTAMP,
+    RecordSource VARCHAR(50),
+    PRIMARY KEY (Order_ID, Customer_ID)
+);
+```
+
+#### **Satellites (Descriptive Data for Business Keys)**
+
+**Purpose:**  
+Satellites store descriptive data related to hubs and links, tracking historical changes.
+
+**Steps:**
+- Create satellite tables for each hub and link.
+- Include attributes (e.g., Quantity, InvoicePrice, DeliveryDate).
+- Include `LoadDate` and `RecordSource`.
+
+**Example:**
+
+```sql
+CREATE TABLE Sat_Order (
+    Order_ID VARCHAR(10),
+    DeliveryDate DATE,
+    LoadDate TIMESTAMP,
+    RecordSource VARCHAR(50),
+    PRIMARY KEY (Order_ID, LoadDate)
+);
+```
+
+### B. Business Vault Modeling
+
+#### **Derived Calculations (Business Rules)**
+
+**Purpose:**  
+The Business Vault holds calculated data, like delivery delays or other derived metrics.
+
+**Steps:**
+- Create derived satellite like `Sat_Delivery_Status` for delay calculations.
+
+**Example Table:**
+
+```sql
+CREATE TABLE Sat_Delivery_Status (
+    Delivery_ID VARCHAR(10),
+    Delayed BOOLEAN,
+    LoadDate TIMESTAMP,
+    RecordSource VARCHAR(50),
+    PRIMARY KEY (Delivery_ID, LoadDate)
+);
+```
+
+**Example Calculation:**
+
+```sql
+INSERT INTO Sat_Delivery_Status
+SELECT f.Delivery_ID,
+       CASE WHEN f.Actual > f.Planned THEN TRUE ELSE FALSE END AS Delayed,
+       CURRENT_TIMESTAMP,
+       'RULE:Delay'
+FROM Sat_TruckFeedback f;
+```
+
+### C. Dimensional Model for Reporting
+
+#### **Fact Table (Consolidation of Data for Reporting)**
+
+**Purpose:**  
+Fact tables store aggregated or transactional data to be used for reporting.
+
+**Steps:**
+- Create `Fact_Order` by joining hub and satellite tables.
+
+**Example:**
+
+```sql
+CREATE VIEW Fact_Order AS
+SELECT o.Order_ID, c.Customer_ID, op.Material_ID, op.Quantity, op.InvoicePrice
+FROM Hub_Order o
+JOIN Link_Order_Customer oc ON o.Order_ID = oc.Order_ID
+JOIN Hub_Customer c ON oc.Customer_ID = c.Customer_ID
+JOIN Link_Order_Material om ON o.Order_ID = om.Order_ID
+JOIN Sat_OrderPosition op ON om.Order_ID = op.Order_ID AND om.Position_ID = op.Position_ID;
+```
+
+#### **Dimension Tables**
+
+**Purpose:**  
+Dimensions are created by joining the hub and satellite tables to capture descriptive information.
+
+---
+
+## 2. Power BI Steps
+
+### A. Import Data into Power BI
+
+- Open Power BI Desktop → Get Data.
+- Choose SQL Server or your DB connection type.
+- Import tables: `Hub_*`, `Link_*`, `Sat_*`.
+
+### B. Data Model Setup
+
+**Create Relationships:**
+- Use Model View to define relationships (e.g., `Hub_Order → Link_Order_Customer`).
+- Set cardinality properly.
+
+**Create Calculated Columns and Measures:**
+
+```DAX
+Delayed = IF(Sat_TruckFeedback[Actual] > Sat_TruckFeedback[Planned], TRUE(), FALSE())
+```
+
+**Create Fact and Dimension Tables:**  
+Use DAX and relationships to model Fact and Dimension tables.
+
+### C. Building Reports in Power BI
+
+**Create Visualizations:**
+- Bar charts, pie charts, line graphs, etc.
+- Use measures like Total Quantity and Invoice Price.
+
+**Add Slicers and Filters:**
+- Example: Filter by `Customer_ID`, `Order_Date`.
+
+### D. Publish to Power BI Service
+
+- File → Publish → Choose Workspace
+- Share with stakeholders or configure refreshes.
+
+---
+
+## 3. Final Notes
+
+- Data Vault offers flexibility for managing large, complex datasets.
+- Business Vault supports derived metrics and rules.
+- Power BI effectively visualizes and analyzes the structured data.
